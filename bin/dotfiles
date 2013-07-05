@@ -1,0 +1,110 @@
+#!/usr/bin/python
+import argparse, sys, yaml, os, logging, shutil
+logging.basicConfig()
+log=logging.getLogger("dotfiles")
+
+dotfilesDir=os.path.expanduser("~/dotfiles/")
+configFile=dotfilesDir+"config.yml"
+dotfiles={}
+
+if __name__=="__main__":
+	ap=argparse.ArgumentParser(description="Manage your dotfiles")
+	ap.add_argument("--link", action="store_const", dest="action", const="link", help="Move the specified files to %s and link it here."%(dotfilesDir,))
+	ap.add_argument("--package", metavar="name", help="Specify a package (subdirectory) for this dotfile.  Valid only with --link")
+	ap.add_argument("--unlink", action="store_const", dest="action", const="unlink", help="If any of the specified files is a link, remove the link and move the file here")
+	ap.add_argument("files", nargs="*", help="Files to link or unlink")
+	ap.add_argument("--install", action="store_const", dest="action", const="install", help="If %s exists, with configuration, create links for all files in the configuration"%(dotfilesDir,))
+	ap.add_argument("--uninstall", action="store_const", dest="action", const="uninstall", help="If %s exists, with configuration, remove all links and replace them with their respective files"%(dotfilesDir,))
+
+	args=ap.parse_args()
+	if args.action not in ("link", "unlink", "install", "uninstall") or (args.action in ("link", "unlink") and len(args.files)==0):
+		ap.print_help()
+		sys.exit(1)
+
+	if args.package:
+		args.package=args.package.strip("/")+"/"
+	else:
+		args.package=""
+
+	if not os.path.exists(dotfilesDir):
+		log.error("Your dotfiles dir (%s) doesn't exist", dotfilesDir)
+		sys.exit(1)
+
+	if not os.path.isdir(dotfilesDir):
+		log.error("Your dotfiles dir (%s) is not a directory", dotfilesDir)
+		sys.exit(1)
+
+	if os.path.exists(configFile):
+		log.debug("Loading config file %s", configFile)
+		with open(configFile, "r") as fp:
+			dotfiles=yaml.load(fp)
+	else:
+		log.debug("Config file %s doesn't exist (it will be created when an action is performed)", configFile)
+
+	if args.action=="link":
+		for fileName in args.files:
+			log.debug("Given filename %s to link", fileName)
+			if not os.path.exists(fileName):
+				log.warning("%s doesn't exist", fileName)
+				continue
+			elif os.path.isdir(fileName):
+				log.warning("%s is a directory, not touching it", fileName)
+				continue
+			elif os.path.islink(fileName):
+				log.warning("%s is a link to another file, not touching it", fileName)
+				continue
+			elif not os.path.isfile(fileName):
+				log.warning("%s is something that's not a file, not touching it", fileName)
+				continue
+
+			sourceFileName=os.path.basename(fileName)
+			destFileName=sourceFileName
+			if destFileName.startswith("."):
+				destFileName=sourceFileName[1:]+".dotfile"
+			destFileName=args.package+destFileName
+
+			if destFileName in dotfiles:
+				log.warning("%s%s is already linked from %s", dotfilesDir, destFileName, os.path.expanduser(dotfiles[destFileName]))
+				continue
+
+			if args.package:
+				if not os.path.exists(dotfilesDir+args.package):
+					os.makedirs(dotfilesDir+args.package)
+
+			shutil.move(os.path.abspath(fileName), dotfilesDir+destFileName)
+			os.symlink(dotfilesDir+destFileName, os.path.abspath(fileName))
+			dotfiles[destFileName]=os.path.abspath(fileName).replace(os.path.expanduser("~"), "").lstrip("/")
+	elif args.action=="unlink":
+		for fileName in args.files:
+			log.debug("Given filename %s to unlink", fileName)
+			dotFileName=os.path.normpath(os.path.join(os.path.dirname(fileName), os.readlink(fileName)))
+			if not os.path.islink(fileName):
+				log.warning("%s is not a link", fileName)
+				continue
+			elif not dotFileName.startswith(dotfilesDir):
+				log.warning("%s does not point to a file in %s (-> %s)", fileName, dotfilesDir, dotFileName)
+				continue
+
+			os.unlink(os.path.abspath(fileName))
+			shutil.move(dotFileName, os.path.abspath(fileName))
+			del(dotfiles[dotFileName.replace(dotfilesDir, "").lstrip("/")])
+	elif args.action=="install":
+		if not dotfiles or len(dotfiles)<1:
+			log.error("No configuration exists to install")
+			sys.exit(1)
+		for dotFile, dotFileLocation in dotfiles.items():
+			dotFile=dotfilesDir+dotFile
+			dotFileLocation=os.path.expanduser("~/"+dotFileLocation)
+			if not os.path.isfile(dotFile):
+				log.warning("%s is not a file or does not exist", dotFile)
+				continue
+			if os.path.exists(dotFileLocation):
+				backupDotFile=dotFileLocation+".dotfiles-backup"
+				log.info("%s already exists, renaming it to %s", dotFileLocation, backupDotFile)
+				shutil.move(dotFileLocation, backupDotFile)
+			os.symlink(dotFile, dotFileLocation)
+	elif args.action=="uninstall":
+		log.error("Not implemented")
+
+	with open(configFile, "w") as fp:
+		yaml.dump(dotfiles, fp, default_flow_style=False)
