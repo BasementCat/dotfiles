@@ -1,0 +1,42 @@
+[
+	{ "keys": ["ctrl+super+right"], "command": "next_view" },
+	{ "keys": ["ctrl+super+left"], "command": "prev_view" },
+	{ "keys": ["alt+w"], "command": "toggle_setting", "args": { "setting": "word_wrap" }},
+	/*I need two versions of this command - one for unordered lists and one for ordered lists.
+	Unfortunately right now I cannot insert the list character in use so I must pick a default
+	(markdown luckily should not care about this)*/
+	/*We also want to have the same behavior for non-task lists*/
+    { "keys": ["enter"], "command": "insert", "args": {"characters": "\n- "}, "context":
+        [
+        	{ "key": "selector", "operator": "equal", "operand": "text.html.markdown" },
+            { "key": "preceding_text", "operator": "regex_match", "operand": "^[-+*]\\s+.*" }
+        ]
+    },
+    { "keys": ["enter"], "command": "insert", "args": {"characters": "\n1. "}, "context":
+        [
+        	{ "key": "selector", "operator": "equal", "operand": "text.html.markdown" },
+            { "key": "preceding_text", "operator": "regex_match", "operand": "^\\d+\\.\\s+.*" }
+        ]
+    },
+    //and now task lists:
+	{ "keys": ["enter"], "command": "insert", "args": {"characters": "\n- [ ] "}, "context":
+        [
+        	{ "key": "selector", "operator": "equal", "operand": "text.html.markdown" },
+            { "key": "preceding_text", "operator": "regex_match", "operand": "^[-+*]\\s+\\[[xX ]\\]\\s+.*" }
+        ]
+    },
+    { "keys": ["enter"], "command": "insert", "args": {"characters": "\n1. [ ] "}, "context":
+        [
+        	{ "key": "selector", "operator": "equal", "operand": "text.html.markdown" },
+            { "key": "preceding_text", "operator": "regex_match", "operand": "^\\d+\\.\\s+\\[[xX ]\\]\\s+.*" }
+        ]
+    },
+    //and finally, one to easily break out of lists if you try to enter an empty list item
+    /*We also want to have the same behavior for non-task lists*/
+    { "keys": ["enter"], "command": "run_macro_file", "args": {"file": "Packages/Default/Delete Line.sublime-macro"}, "context":
+        [
+        	{ "key": "selector", "operator": "equal", "operand": "text.html.markdown" },
+            { "key": "preceding_text", "operator": "regex_match", "operand": "^([-+*]|\\d+\\.)\\s+(\\[[xX ]\\]\\s+)?" }
+        ]
+    }
+]
